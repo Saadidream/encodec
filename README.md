@@ -186,6 +186,83 @@ Note that the 48 kHz model processes the audio by chunks of 1 seconds, with an o
 and renormalizes the audio to have unit scale. For this model, the output of `model.encode(wav)`
 would a list (for each frame of 1 second) of a tuple `(codes, scale)` with `scale` a scalar tensor.
 
+## Audio Style Transfer
+
+EnCodec now includes a neural audio style transfer module that enables transferring audio styles while maintaining content structure. This feature allows you to transform the style of one audio while preserving the content of another.
+
+### Features
+- Transfer voice styles between different speakers
+- Maintain content while changing audio characteristics
+- Support for both mono and stereo audio
+- GPU acceleration for faster processing
+- Compatible with existing EnCodec compression pipeline
+
+### Usage
+
+#### Training
+```bash
+python -m encodec.train_style_transfer \
+    --content-dir /path/to/content/audio \
+    --style-dir /path/to/style/audio \
+    --checkpoint-dir checkpoints
+```
+
+#### Inference
+```bash
+python -m encodec.apply_style_transfer \
+    --model-path checkpoints/model_epoch_100.pt \
+    --content-path input.wav \
+    --style-path style.wav \
+    --output-path output.wav
+```
+
+### Example
+```python
+from encodec import NeuralAudioStyleTransfer
+from encodec.utils import convert_audio
+import torchaudio
+
+# Load model
+model = NeuralAudioStyleTransfer()
+model.load_state_dict(torch.load("checkpoints/model_epoch_100.pt"))
+
+# Load content and style audio
+content_audio, sr = torchaudio.load("content.wav")
+style_audio, _ = torchaudio.load("style.wav")
+
+# Convert audio to model's sample rate
+content_audio = convert_audio(content_audio, sr, model.sample_rate, model.channels)
+style_audio = convert_audio(style_audio, sr, model.sample_rate, model.channels)
+
+# Apply style transfer
+with torch.no_grad():
+    output_audio = model(content_audio, style_audio)
+
+# Save result
+torchaudio.save("output.wav", output_audio, model.sample_rate)
+```
+
+### Parameters
+- `--content-dir`: Directory containing content audio files
+- `--style-dir`: Directory containing style reference audio files
+- `--sample-rate`: Target sample rate (default: 16000)
+- `--batch-size`: Training batch size (default: 32)
+- `--epochs`: Number of training epochs (default: 100)
+- `--learning-rate`: Learning rate (default: 0.001)
+
+### Integration with Compression
+The style transfer module can be used in conjunction with EnCodec's compression pipeline:
+
+```python
+# First apply style transfer
+output_audio = model(content_audio, style_audio)
+
+# Then compress the result
+model = EncodecModel.encodec_model_24khz()
+model.set_target_bandwidth(6.0)
+compressed = model.encode(output_audio)
+```
+
 ## Installation for development
 
 This will install the dependencies and a `encodec` in developer mode (changes to the files
